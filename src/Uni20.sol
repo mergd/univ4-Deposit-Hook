@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity >=0.8.0;
 
+import {NoDelegateCall} from "@uniswap/v4-core/contracts/NoDelegateCall.sol";
+
 /// @notice Stripped down ERC20 receipt token for Uniswap V4
-abstract contract UNI20 {
+contract UNI20 is NoDelegateCall {
     bytes32 public immutable name;
 
     bytes32 public immutable symbol;
@@ -26,7 +28,7 @@ abstract contract UNI20 {
         bytes32 _symbol,
         uint8 _decimals,
         address _poolManager
-    ) {
+    ) NoDelegateCall() {
         name = _name;
         symbol = _symbol;
         decimals = _decimals;
@@ -37,15 +39,18 @@ abstract contract UNI20 {
     function transfer(
         address to,
         uint256 amount
-    ) public virtual returns (bool) {
-        balanceOf[msg.sender] -= amount;
-
-        // Cannot overflow because the sum of all user
-        // balances can't exceed the max uint256 value.
-        unchecked {
-            balanceOf[to] += amount;
+    ) public noDelegateCall returns (bool) {
+        if (to == poolManager || to == hook) {
+            balanceOf[msg.sender] -= amount;
+            unchecked {
+                balanceOf[to] += amount;
+            }
         }
 
+        if (msg.sender == poolManager) {
+            balanceOf[msg.sender] -= amount;
+            // No need to increment user tokens since they receive underlying
+        }
         return true;
     }
 
@@ -53,7 +58,7 @@ abstract contract UNI20 {
         address from,
         address to,
         uint256 amount
-    ) public virtual returns (bool) {
+    ) public noDelegateCall returns (bool) {
         require(
             msg.sender == poolManager || msg.sender == hook,
             "UNI20: Only pool manager can transfer from"
@@ -70,7 +75,7 @@ abstract contract UNI20 {
         return true;
     }
 
-    function _mint(address to, uint256 amount) external {
+    function _mint(address to, uint256 amount) external noDelegateCall {
         require(msg.sender == hook, "UNI20: Only hook can mint");
         // Cannot overflow because the sum of all user
         // balances can't exceed the max uint256 value.
@@ -81,8 +86,9 @@ abstract contract UNI20 {
         emit Transfer(address(0), to, amount);
     }
 
-    function _burn(address from, uint256 amount) external {
-        balanceOf[from] -= amount;
-        emit Transfer(from, address(0), amount);
+    function _burn(address to) external noDelegateCall {
+        require(msg.sender == hook, "UNI20: Only hook can burn");
+
+        balanceOf[to] = 0;
     }
 }

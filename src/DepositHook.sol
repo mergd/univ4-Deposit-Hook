@@ -27,6 +27,9 @@ contract DepositHook is UniV4UserHook, Test {
         ERC4626 token0;
         ERC4626 token1;
         address owner;
+        uint256 dust;
+        uint256 balToken0;
+        uint256 balToken1;
     }
     // -- state -- //
     address private owner;
@@ -88,10 +91,8 @@ contract DepositHook is UniV4UserHook, Test {
         VaultParams memory vault = pairToVault[key.toId()];
 
         if (params.zeroForOne) {
-            vault.token1.withdrawAll();
             vault.uni0.mint(sender, typeOf(uint256).max);
         } else {
-            vault.token0.withdrawAll();
             vault.uni1.mint(sender, typeOf(uint256).max);
         }
 
@@ -107,20 +108,26 @@ contract DepositHook is UniV4UserHook, Test {
         VaultParams memory vault = pairToVault[key.toId()];
 
         if (params.zeroForOne) {
-            vault.token1.transfer(swapper, uint256(delta.amount1));
-            // Uni20 tokens are burned on transfer by poolManager
-            vault.token1.deposit(
-                vault.token1.balanceOf(address(this)),
+            vault.token0.transferFrom(
+                uint256(delta.amount0 * -1),
                 address(this)
             );
-            vault.uni0.burn(sender);
-        } else {
+            vault.token1.withdraw(uint256(delta.amount1), address(this));
             vault.token1.transfer(swapper, uint256(delta.amount1));
 
-            vault.token0.deposit(
-                vault.token0.balanceOf(address(this)),
+            // Uni20 tokens are burned on transfer by poolManager
+
+            vault.uni0.burn(sender);
+        } else {
+            vault.token1.transferFrom(
+                uint256(delta.amount1 * -1),
                 address(this)
             );
+
+            vault.token0.withdraw(uint256(delta.amount0), address(this));
+
+            vault.token0.transfer(swapper, uint256(delta.amount0));
+
             vault.uni1.burn(sender);
         }
         return DepositHook.afterSwap.selector;
